@@ -6,17 +6,19 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: linkmeet-backend
+    hostname: linkmeet-backend  # Explicit hostname
     ports:
-      - "5001:5000"  # App: localhost:5001 -> container:5000
-      - "5002:5555"  # Prisma Studio: localhost:5002 -> container:5555
+      - "5001:5000"
+      - "5002:5555"
     environment:
       - NODE_ENV=production
     env_file:
-      - ./backend/.env
+      - ./backend/.env.production
     restart: unless-stopped
     networks:
-      - linkmeet-network
-    depends_on: []
+      linkmeet-network:
+        aliases:
+          - linkmeet-backend
     volumes:
       - ./backend/logs:/app/logs
     healthcheck:
@@ -26,10 +28,34 @@ services:
       retries: 3
       start_period: 40s
 
+  linkmeet-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: linkmeet-frontend
+    hostname: linkmeet-frontend  # Explicit hostname
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:5001
+      - SERVER_SIDE_API_BASE_URL=http://linkmeet-backend:5000
+    ports:
+      - "5003:3000"
+    env_file:
+      - ./frontend/.env.production
+    restart: unless-stopped
+    networks:
+      - linkmeet-network
+    depends_on:
+      linkmeet-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 networks:
   linkmeet-network:
+    name: linkmeet-network
     driver: bridge
-
-volumes:
-  logs:
-    driver: local
+    attachable: true

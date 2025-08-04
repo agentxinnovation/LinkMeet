@@ -4,16 +4,39 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const fs = require('fs');
 const path = require('path');
+const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Initialize Prisma Client
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+});
 
 // Create logs directory if it doesn't exist
 const logsDir = path.join(__dirname, 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
+
+// Database connection check
+const connectDB = async () => {
+  try {
+    await prisma.$connect();
+    console.log('✅ Database connected successfully');
+    
+    // Test database with a simple query
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('🔍 Database query test passed');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+    return false;
+  }
+};
 
 // Helper function to get client IP
 const getClientIP = (req) => {
@@ -147,13 +170,28 @@ app.use(detailedLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Health check endpoint with database status
+app.get('/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  let dbMessage = 'Database connection failed';
+  
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus = 'connected';
+    dbMessage = 'Database is healthy';
+  } catch (error) {
+    console.error('Database health check failed:', error.message);
+  }
+
   res.status(200).json({
     success: true,
     message: 'LinkMeet Backend is running!',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    database: {
+      status: dbStatus,
+      message: dbMessage
+    }
   });
 });
 
@@ -164,6 +202,22 @@ app.get('/', (req, res) => {
     message: 'Welcome to LinkMeet API! 🎥',
     version: '1.0.0',
     author: 'Harsh Raithatha'
+  });
+});
+
+// API base route
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'LinkMeet API v1.0.0',
+    docs: '/docs',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      users: '/api/users',
+      rooms: '/api/rooms',
+      messages: '/api/messages'
+    }
   });
 });
 
@@ -212,20 +266,6 @@ app.get('/api/logs', (req, res) => {
     });
   });
 });
-app.get('/api', (req, res) => {
-  res.json({
-    success: true,
-    message: 'LinkMeet API v1.0.0',
-    docs: '/docs',
-    endpoints: {
-      health: '/health',
-      auth: '/api/auth',
-      users: '/api/users',
-      rooms: '/api/rooms',
-      messages: '/api/messages'
-    }
-  });
-});
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -249,15 +289,53 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Graceful shutdown
+process.on('beforeExit', async () => {
+  console.log('🔄 Shutting down gracefully...');
+  await prisma.$disconnect();
+  console.log('📦 Database connection closed');
+});
+
+process.on('SIGINT', async () => {
+  console.log('🔄 Received SIGINT, shutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('🔄 Received SIGTERM, shutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`
+const startServer = async () => {
+  try {
+    // Connect to database
+    const dbConnected = await connectDB();
+    
+    if (!dbConnected) {
+      console.log('⚠️  Starting server without database connection...');
+    }
+
+    app.listen(PORT, () => {
+      console.log(`
 🚀 LinkMeet Backend Server Started!
 📡 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
 📊 Health Check: http://localhost:${PORT}/health
 📖 API Docs: http://localhost:${PORT}/api
-  `);
-});
+🗃️  Database: ${dbConnected ? '✅ Connected' : '❌ Disconnected'}
+      `);
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Start the server
+startServer();
 
 module.exports = app;
