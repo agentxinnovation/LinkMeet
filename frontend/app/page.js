@@ -3,7 +3,9 @@ import { getServerSideBaseUrl } from '@/lib/config';
 async function checkBackendHealth() {
   try {
     const res = await fetch(`${getServerSideBaseUrl()}/health`, { cache: 'no-store' });
+    console.log(res)
     return res.status === 200;
+
   } catch (error) {
     return false;
   }

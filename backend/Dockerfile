@@ -19,26 +19,25 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+# Use the existing node user (UID 1000, GID 1000)
+# No need to create new user, node user already exists
 
 # Create startup script and set permissions
 COPY start.sh ./
 RUN chmod +x start.sh
 
-# Change ownership of the app directory
-RUN chown -R nodejs:nodejs /app
+# Change ownership of the app directory (but NOT the logs directory - it will be mounted)
+RUN chown -R node:node /app
 
 # Switch to non-root user
-USER nodejs
+USER node
 
 # Expose ports - 5000 for app, 5555 for Prisma Studio
 EXPOSE 5000 5555
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+# Temporarily disable health check for debugging
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#   CMD node -e "require('http').get('http://localhost:5000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start both app and Prisma Studio
 CMD ["./start.sh"]

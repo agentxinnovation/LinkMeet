@@ -16,10 +16,21 @@ const prisma = new PrismaClient({
 });
 
 // Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+const logsDir = process.env.LOGS_DIR || path.join(__dirname, 'logs');
+
+// Ensure directory exists with proper permissions
+try {
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true, mode: 0o777 });
+  } else {
+    fs.chmodSync(logsDir, 0o777);
+  }
+} catch (err) {
+  console.error('❌ Could not setup logs directory, falling back to /tmp');
+  logsDir = '/tmp/linkmeet-logs';
+  fs.mkdirSync(logsDir, { recursive: true, mode: 0o777 });
 }
+
 
 // Database connection check
 const connectDB = async () => {
