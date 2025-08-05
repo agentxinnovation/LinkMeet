@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkMeet Backend Tester</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #4a6baf;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .panel {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #4a6baf;
+            display: flex;
+            align-items: center;
+        }
+        .panel-title .status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #ccc;
+        }
+        .panel-title .status.connected {
+            background-color: #4CAF50;
+        }
+        .panel-title .status.disconnected {
+            background-color: #F44336;
+        }
+        .btn {
+            background-color: #4a6baf;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #3a5a9f;
+        }
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-entry.info {
+            color: #2196F3;
+        }
+        .log-entry.success {
+            color: #4CAF50;
+        }
+        .log-entry.error {
+            color: #F44336;
+        }
+        .log-entry.warning {
+            color: #FF9800;
+        }
+        .log-entry.event {
+            color: #9C27B0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .users-list {
+            margin-top: 15px;
+        }
+        .user-item {
+            padding: 8px;
+            background-color: #f0f4ff;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .typing-indicator {
+            font-style: italic;
+            color: #666;
+            margin-top: 10px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f0f4ff;
+            border-radius: 4px;
+        }
+        .message .sender {
+            font-weight: bold;
+            color: #4a6baf;
+        }
+        .message .time {
+            font-size: 0.8em;
+            color: #666;
+            margin-left: 10px;
+        }
+        .message .content {
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LinkMeet Backend Tester</h1>
+        
+        <div class="grid">
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="status" id="health-status"></div>
+                    Health Check
+                </div>
+                <button id="health-check-btn" class="btn">Check Health</button>
+                <div class="log-container" id="health-log"></div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="status" id="db-status"></div>
+                    Database Connection
+                </div>
+                <button id="db-test-btn" class="btn">Test Database</button>
+                <div class="log-container" id="db-log"></div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="status" id="ws-status"></div>
+                    WebSocket Connection
+                </div>
+                <button id="ws-connect-btn" class="btn">Connect</button>
+                <button id="ws-disconnect-btn" class="btn" disabled>Disconnect</button>
+                <div class="log-container" id="ws-log"></div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="status" id="room-status"></div>
+                    Room Management
+                </div>
+                <div class="form-group">
+                    <label for="room-id">Room ID</label>
+                    <input type="text" id="room-id" value="test-room">
+                </div>
+                <div class="form-group">
+                    <label for="user-id">User ID</label>
+                    <input type="text" id="user-id" value="user123">
+                </div>
+                <div class="form-group">
+                    <label for="user-name">User Name</label>
+                    <input type="text" id="user-name" value="Test User">
+                </div>
+                <button id="join-room-btn" class="btn" disabled>Join Room</button>
+                <button id="leave-room-btn" class="btn" disabled>Leave Room</button>
+                <div class="users-list" id="room-users"></div>
+                <div class="log-container" id="room-log"></div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="status"></div>
+                    Chat Messages
+                </div>
+                <div class="form-group">
+                    <label for="message-text">Message</label>
+                    <textarea id="message-text">Hello from the tester!</textarea>
+                </div>
+                <button id="send-message-btn" class="btn" disabled>Send Message</button>
+                <div id="typing-indicator" class="typing-indicator" style="display: none;"></div>
+                <div class="log-container" id="chat-log"></div>
+            </div>
+            
+            <div class="panel">
+                <div class="panel-title">
+                    <div class="status"></div>
+                    WebRTC Signaling
+                </div>
+                <button id="send-offer-btn" class="btn" disabled>Send Offer</button>
+                <button id="send-answer-btn" class="btn" disabled>Send Answer</button>
+                <button id="send-ice-btn" class="btn" disabled>Send ICE Candidate</button>
+                <button id="send-ready-btn" class="btn" disabled>Send Ready</button>
+                <div class="log-container" id="webrtc-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // DOM Elements
+        const healthCheckBtn = document.getElementById('health-check-btn');
+        const healthLog = document.getElementById('health-log');
+        const healthStatus = document.getElementById('health-status');
+        
+        const dbTestBtn = document.getElementById('db-test-btn');
+        const dbLog = document.getElementById('db-log');
+        const dbStatus = document.getElementById('db-status');
+        
+        const wsConnectBtn = document.getElementById('ws-connect-btn');
+        const wsDisconnectBtn = document.getElementById('ws-disconnect-btn');
+        const wsLog = document.getElementById('ws-log');
+        const wsStatus = document.getElementById('ws-status');
+        
+        const joinRoomBtn = document.getElementById('join-room-btn');
+        const leaveRoomBtn = document.getElementById('leave-room-btn');
+        const roomIdInput = document.getElementById('room-id');
+        const userIdInput = document.getElementById('user-id');
+        const userNameInput = document.getElementById('user-name');
+        const roomLog = document.getElementById('room-log');
+        const roomUsersList = document.getElementById('room-users');
+        const roomStatus = document.getElementById('room-status');
+        
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        const messageText = document.getElementById('message-text');
+        const chatLog = document.getElementById('chat-log');
+        const typingIndicator = document.getElementById('typing-indicator');
+        
+        const sendOfferBtn = document.getElementById('send-offer-btn');
+        const sendAnswerBtn = document.getElementById('send-answer-btn');
+        const sendIceBtn = document.getElementById('send-ice-btn');
+        const sendReadyBtn = document.getElementById('send-ready-btn');
+        const webrtcLog = document.getElementById('webrtc-log');
+        
+        // Global variables
+        let socket = null;
+        let currentRoom = null;
+        let isTyping = false;
+        let typingTimeout = null;
+        
+        // Helper functions
+        function addLog(container, message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(logEntry);
+            container.scrollTop = container.scrollTop + 1000;
+        }
+        
+        function clearLog(container) {
+            container.innerHTML = '';
+        }
+        
+        function updateStatusIndicator(element, connected) {
+            element.classList.remove('connected', 'disconnected');
+            element.classList.add(connected ? 'connected' : 'disconnected');
+        }
+        
+        // Health Check
+        healthCheckBtn.addEventListener('click', async () => {
+            clearLog(healthLog);
+            addLog(healthLog, 'Checking server health...');
+            
+            try {
+                const response = await fetch('http://localhost:5000/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addLog(healthLog, '✅ Health check successful!', 'success');
+                    addLog(healthLog, `Server: ${data.message}`, 'success');
+                    addLog(healthLog, `Environment: ${data.environment}`, 'success');
+                    addLog(healthLog, `Database: ${data.database.status} (${data.database.message})`, 
+                           data.database.status === 'connected' ? 'success' : 'error');
+                    addLog(healthLog, `WebSocket clients: ${data.websocket.connectedClients || 0}`, 'success');
+                    updateStatusIndicator(healthStatus, true);
+                } else {
+                    addLog(healthLog, `❌ Health check failed: ${data.error || 'Unknown error'}`, 'error');
+                    updateStatusIndicator(healthStatus, false);
+                }
+            } catch (error) {
+                addLog(healthLog, `❌ Health check failed: ${error.message}`, 'error');
+                updateStatusIndicator(healthStatus, false);
+            }
+        });
+        
+        // Database Test
+        dbTestBtn.addEventListener('click', async () => {
+            clearLog(dbLog);
+            addLog(dbLog, 'Testing database connection...');
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/test-db');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addLog(dbLog, '✅ Database connection successful!', 'success');
+                    addLog(dbLog, `Status: ${data.status}`, 'success');
+                    addLog(dbLog, `Test query result: ${data.result}`, 'success');
+                    updateStatusIndicator(dbStatus, true);
+                } else {
+                    addLog(dbLog, `❌ Database test failed: ${data.error || 'Unknown error'}`, 'error');
+                    updateStatusIndicator(dbStatus, false);
+                }
+            } catch (error) {
+                addLog(dbLog, `❌ Database test failed: ${error.message}`, 'error');
+                updateStatusIndicator(dbStatus, false);
+            }
+        });
+        
+        // WebSocket Connection
+        wsConnectBtn.addEventListener('click', () => {
+            clearLog(wsLog);
+            addLog(wsLog, 'Connecting to WebSocket server...');
+            
+            socket = io('http://localhost:5000', {
+                transports: ['websocket'],
+                secure: true,
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+            });
+            
+            socket.on('connect', () => {
+                addLog(wsLog, '✅ Connected to WebSocket server', 'success');
+                updateStatusIndicator(wsStatus, true);
+                wsConnectBtn.disabled = true;
+                wsDisconnectBtn.disabled = false;
+                joinRoomBtn.disabled = false;
+                sendMessageBtn.disabled = false;
+                sendOfferBtn.disabled = false;
+                sendAnswerBtn.disabled = false;
+                sendIceBtn.disabled = false;
+                sendReadyBtn.disabled = false;
+                
+                // Register user
+                socket.emit('user-connected', {
+                    name: userNameInput.value || 'Anonymous',
+                    id: userIdInput.value || 'user' + Math.random().toString(36).substr(2, 9)
+                });
+            });
+            
+            socket.on('disconnect', () => {
+                addLog(wsLog, '⚠️ Disconnected from WebSocket server', 'warning');
+                updateStatusIndicator(wsStatus, false);
+                wsConnectBtn.disabled = false;
+                wsDisconnectBtn.disabled = true;
+                joinRoomBtn.disabled = true;
+                leaveRoomBtn.disabled = true;
+                sendMessageBtn.disabled = true;
+                sendOfferBtn.disabled = true;
+                sendAnswerBtn.disabled = true;
+                sendIceBtn.disabled = true;
+                sendReadyBtn.disabled = true;
+                currentRoom = null;
+                roomUsersList.innerHTML = '';
+                updateStatusIndicator(roomStatus, false);
+            });
+            
+            socket.on('connect_error', (error) => {
+                addLog(wsLog, `❌ Connection error: ${error.message}`, 'error');
+                updateStatusIndicator(wsStatus, false);
+            });
+            
+            socket.on('user-joined', (data) => {
+                addLog(roomLog, `👤 User joined: ${data.userName} (${data.userId})`, 'event');
+                updateRoomUsers();
+            });
+            
+            socket.on('user-left', (data) => {
+                addLog(roomLog, `👤 User left: ${data.userName} (${data.userId})`, 'event');
+                updateRoomUsers();
+            });
+            
+            socket.on('room-users', (users) => {
+                addLog(roomLog, `👥 Room users updated: ${users.length} users`, 'event');
+                updateRoomUsers(users);
+            });
+            
+            socket.on('message', (data) => {
+                const messageElement = document.createElement('div');
+                messageElement.className = 'message';
+                messageElement.innerHTML = `
+                    <div>
+                        <span class="sender">${data.userName}</span>
+                        <span class="time">${new Date(data.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <div class="content">${data.message}</div>
+                `;
+                chatLog.appendChild(messageElement);
+                chatLog.scrollTop = chatLog.scrollHeight;
+            });
+            
+            socket.on('typing', (data) => {
+                typingIndicator.textContent = `${data.userName} is typing...`;
+                typingIndicator.style.display = 'block';
+                
+                // Hide after 3 seconds if no new typing event
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => {
+                    typingIndicator.style.display = 'none';
+                }, 3000);
+            });
+            
+            socket.on('stop-typing', () => {
+                typingIndicator.style.display = 'none';
+            });
+            
+            socket.on('offer', (data) => {
+                addLog(webrtcLog, `📡 Received offer from ${data.sender} in room ${data.roomId}`, 'event');
+            });
+            
+            socket.on('answer', (data) => {
+                addLog(webrtcLog, `📡 Received answer from ${data.sender} in room ${data.roomId}`, 'event');
+            });
+            
+            socket.on('ice-candidate', (data) => {
+                addLog(webrtcLog, `📡 Received ICE candidate from ${data.sender} in room ${data.roomId}`, 'event');
+            });
+            
+            socket.on('ready', (data) => {
+                addLog(webrtcLog, `✅ User ${data.sender} is ready in room ${data.roomId}`, 'success');
+            });
+        });
+        
+        wsDisconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                addLog(wsLog, 'Disconnecting from WebSocket server...');
+                socket.disconnect();
+            }
+        });
+        
+        // Room Management
+        function updateRoomUsers(users = null) {
+            roomUsersList.innerHTML = '';
+            
+            if (users) {
+                users.forEach(user => {
+                    const userElement = document.createElement('div');
+                    userElement.className = 'user-item';
+                    userElement.textContent = `${user.userName} (${user.userId})`;
+                    roomUsersList.appendChild(userElement);
+                });
+            }
+        }
+        
+        joinRoomBtn.addEventListener('click', () => {
+            const roomId = roomIdInput.value;
+            const userId = userIdInput.value;
+            const userName = userNameInput.value;
+            
+            if (!roomId) {
+                addLog(roomLog, '❌ Please enter a room ID', 'error');
+                return;
+            }
+            
+            addLog(roomLog, `Joining room: ${roomId}...`);
+            
+            socket.emit('join-room', {
+                roomId: roomId,
+                userId: userId,
+                userName: userName
+            });
+            
+            currentRoom = roomId;
+            joinRoomBtn.disabled = true;
+            leaveRoomBtn.disabled = false;
+            updateStatusIndicator(roomStatus, true);
+        });
+        
+        leaveRoomBtn.addEventListener('click', () => {
+            if (!currentRoom) return;
+            
+            addLog(roomLog, `Leaving room: ${currentRoom}...`);
+            
+            socket.emit('leave-room', {
+                roomId: currentRoom
+            });
+            
+            currentRoom = null;
+            joinRoomBtn.disabled = false;
+            leaveRoomBtn.disabled = true;
+            roomUsersList.innerHTML = '';
+            updateStatusIndicator(roomStatus, false);
+        });
+        
+        // Chat Messages
+        messageText.addEventListener('input', () => {
+            if (!isTyping && currentRoom) {
+                isTyping = true;
+                socket.emit('typing', {
+                    roomId: currentRoom,
+                    userName: userNameInput.value
+                });
+            }
+            
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                if (isTyping && currentRoom) {
+                    isTyping = false;
+                    socket.emit('stop-typing', {
+                        roomId: currentRoom
+                    });
+                }
+            }, 2000);
+        });
+        
+        sendMessageBtn.addEventListener('click', () => {
+            const message = messageText.value;
+            const userName = userNameInput.value;
+            
+            if (!message || !currentRoom) return;
+            
+            socket.emit('message', {
+                roomId: currentRoom,
+                message: message,
+                userName: userName
+            });
+            
+            // Add to local chat log immediately
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message';
+            messageElement.innerHTML = `
+                <div>
+                    <span class="sender">You</span>
+                    <span class="time">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div class="content">${message}</div>
+            `;
+            chatLog.appendChild(messageElement);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            
+            messageText.value = '';
+        });
+        
+        // WebRTC Signaling
+        sendOfferBtn.addEventListener('click', () => {
+            if (!currentRoom) return;
+            
+            const target = prompt("Enter target user ID:");
+            if (!target) return;
+            
+            socket.emit('offer', {
+                target: target,
+                offer: "test-offer-" + Date.now(),
+                roomId: currentRoom
+            });
+            
+            addLog(webrtcLog, `📡 Sent offer to ${target} in room ${currentRoom}`, 'event');
+        });
+        
+        sendAnswerBtn.addEventListener('click', () => {
+            if (!currentRoom) return;
+            
+            const target = prompt("Enter target user ID:");
+            if (!target) return;
+            
+            socket.emit('answer', {
+                target: target,
+                answer: "test-answer-" + Date.now(),
+                roomId: currentRoom
+            });
+            
+            addLog(webrtcLog, `📡 Sent answer to ${target} in room ${currentRoom}`, 'event');
+        });
+        
+        sendIceBtn.addEventListener('click', () => {
+            if (!currentRoom) return;
+            
+            const target = prompt("Enter target user ID:");
+            if (!target) return;
+            
+            socket.emit('ice-candidate', {
+                target: target,
+                candidate: "test-candidate-" + Date.now(),
+                roomId: currentRoom
+            });
+            
+            addLog(webrtcLog, `📡 Sent ICE candidate to ${target} in room ${currentRoom}`, 'event');
+        });
+        
+        sendReadyBtn.addEventListener('click', () => {
+            if (!currentRoom) return;
+            
+            socket.emit('ready', {
+                roomId: currentRoom
+            });
+            
+            addLog(webrtcLog, `✅ Sent ready signal in room ${currentRoom}`, 'success');
+        });
+    </script>
+</body>
+</html>

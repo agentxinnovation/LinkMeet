@@ -4,10 +4,16 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
+// Import routes
+const apiRoutes = require('./app.js');
+
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // Initialize Prisma Client
@@ -15,9 +21,18 @@ const prisma = new PrismaClient({
   log: ['query', 'info', 'warn', 'error'],
 });
 
+// Initialize Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin:  "*",//||process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling']
+});
+
 // Create logs directory if it doesn't exist
 const logsDir = process.env.LOGS_DIR || path.join(__dirname, 'logs');
-
 // Ensure directory exists with proper permissions
 try {
   if (!fs.existsSync(logsDir)) {
@@ -30,7 +45,6 @@ try {
   logsDir = '/tmp/linkmeet-logs';
   fs.mkdirSync(logsDir, { recursive: true, mode: 0o777 });
 }
-
 
 // Database connection check
 const connectDB = async () => {
@@ -102,7 +116,7 @@ const detailedLogger = (req, res, next) => {
   const requestBody = req.body && Object.keys(req.body).length > 0 
     ? JSON.stringify(req.body) 
     : 'No body';
-
+  
   // Store original json method to capture response
   const originalJson = res.json;
   let responseBody = '';
@@ -111,7 +125,7 @@ const detailedLogger = (req, res, next) => {
     responseBody = JSON.stringify(body);
     return originalJson.call(this, body);
   };
-
+  
   // Log when response finishes
   res.on('finish', () => {
     const endTime = Date.now();
@@ -130,7 +144,7 @@ const detailedLogger = (req, res, next) => {
       statusCode,
       duration: `${duration}ms`
     };
-
+    
     // Format for file logging (pipe-separated for easy parsing)
     const fileLogEntry = [
       timestamp,
@@ -143,32 +157,32 @@ const detailedLogger = (req, res, next) => {
       `${duration}ms`,
       userAgent.replace(/\|/g, '\\|') // Escape pipes in user agent
     ].join(' | ') + '\n';
-
+    
     // Daily log file name
     const today = new Date().toISOString().split('T')[0];
     const logFileName = `requests-${today}.log`;
     const logFilePath = path.join(logsDir, logFileName);
-
+    
     // Write to file (append mode)
     fs.appendFile(logFilePath, fileLogEntry, (err) => {
       if (err) {
         console.error('❌ Failed to write to log file:', err);
       }
     });
-
+    
     // Console log for development
     if (process.env.NODE_ENV !== 'production') {
       console.log(`📝 ${method} ${url} - ${statusCode} - ${clientIP} - ${duration}ms`);
     }
   });
-
+  
   next();
 };
 
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: "*"||process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
 
@@ -193,7 +207,7 @@ app.get('/health', async (req, res) => {
   } catch (error) {
     console.error('Database health check failed:', error.message);
   }
-
+  
   res.status(200).json({
     success: true,
     message: 'LinkMeet Backend is running!',
@@ -202,32 +216,10 @@ app.get('/health', async (req, res) => {
     database: {
       status: dbStatus,
       message: dbMessage
-    }
-  });
-});
-
-// Hello World route
-app.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Welcome to LinkMeet API! 🎥',
-    version: '1.0.0',
-    author: 'Harsh Raithatha'
-  });
-});
-
-// API base route
-app.get('/api', (req, res) => {
-  res.json({
-    success: true,
-    message: 'LinkMeet API v1.0.0',
-    docs: '/docs',
-    endpoints: {
-      health: '/health',
-      auth: '/api/auth',
-      users: '/api/users',
-      rooms: '/api/rooms',
-      messages: '/api/messages'
+    },
+    websocket: {
+      status: 'active',
+      connectedClients: io.engine.clientsCount
     }
   });
 });
@@ -241,11 +233,11 @@ app.get('/api/logs', (req, res) => {
       error: 'Access denied'
     });
   }
-
+  
   const today = new Date().toISOString().split('T')[0];
   const logFileName = `requests-${today}.log`;
   const logFilePath = path.join(logsDir, logFileName);
-
+  
   fs.readFile(logFilePath, 'utf8', (err, data) => {
     if (err) {
       return res.status(404).json({
@@ -253,7 +245,7 @@ app.get('/api/logs', (req, res) => {
         error: 'No logs found for today'
       });
     }
-
+    
     const logs = data.trim().split('\n').slice(-50); // Last 50 entries
     const parsedLogs = logs.map(log => {
       const parts = log.split(' | ');
@@ -269,12 +261,191 @@ app.get('/api/logs', (req, res) => {
         userAgent: parts[8]
       };
     });
-
+    
     res.json({
       success: true,
       data: parsedLogs,
       total: parsedLogs.length
     });
+  });
+});
+
+// API routes
+app.use('/api', apiRoutes);
+
+// WebSocket Connection Handling
+const connectedUsers = new Map(); // Store connected users
+const roomUsers = new Map(); // Store users in rooms
+
+io.on('connection', (socket) => {
+  console.log(`🔌 User connected: ${socket.id}`);
+  
+  // Store user connection
+  socket.on('user-connected', (userData) => {
+    connectedUsers.set(socket.id, userData);
+    console.log(`👤 User ${userData.name || 'Anonymous'} connected with ID: ${socket.id}`);
+  });
+
+  // Handle joining a room
+  socket.on('join-room', (data) => {
+    const { roomId, userId, userName } = data;
+    
+    // Leave previous room if any
+    const currentRoom = [...socket.rooms].find(room => room !== socket.id);
+    if (currentRoom) {
+      socket.leave(currentRoom);
+      socket.to(currentRoom).emit('user-left', { 
+        userId: socket.id, 
+        userName: connectedUsers.get(socket.id)?.name || 'Anonymous' 
+      });
+    }
+    
+    // Join new room
+    socket.join(roomId);
+    
+    // Store room info
+    if (!roomUsers.has(roomId)) {
+      roomUsers.set(roomId, new Map());
+    }
+    roomUsers.get(roomId).set(socket.id, { userId, userName, socketId: socket.id });
+    
+    // Notify others in the room
+    socket.to(roomId).emit('user-joined', { 
+      userId: socket.id, 
+      userName: userName || 'Anonymous',
+      socketId: socket.id
+    });
+    
+    // Send current room users to the new user
+    const roomUsersList = Array.from(roomUsers.get(roomId).values());
+    socket.emit('room-users', roomUsersList);
+    
+    console.log(`🏠 User ${userName || socket.id} joined room: ${roomId}`);
+  });
+
+  // Handle leaving a room
+  socket.on('leave-room', (data) => {
+    const { roomId } = data;
+    const currentRoom = [...socket.rooms].find(room => room !== socket.id);
+    
+    if (currentRoom === roomId) {
+      socket.leave(roomId);
+      
+      // Remove user from room tracking
+      if (roomUsers.has(roomId)) {
+        const userData = roomUsers.get(roomId).get(socket.id);
+        roomUsers.get(roomId).delete(socket.id);
+        
+        // Clean up empty rooms
+        if (roomUsers.get(roomId).size === 0) {
+          roomUsers.delete(roomId);
+        }
+        
+        // Notify others
+        socket.to(roomId).emit('user-left', { 
+          userId: socket.id, 
+          userName: userData?.userName || 'Anonymous' 
+        });
+      }
+      
+      console.log(`🚪 User left room: ${roomId}`);
+    }
+  });
+
+  // WebRTC Signaling Events
+  socket.on('offer', (data) => {
+    const { target, offer, roomId } = data;
+    socket.to(target).emit('offer', {
+      offer,
+      sender: socket.id,
+      roomId
+    });
+    console.log(`📡 Offer sent from ${socket.id} to ${target}`);
+  });
+
+  socket.on('answer', (data) => {
+    const { target, answer, roomId } = data;
+    socket.to(target).emit('answer', {
+      answer,
+      sender: socket.id,
+      roomId
+    });
+    console.log(`📡 Answer sent from ${socket.id} to ${target}`);
+  });
+
+  socket.on('ice-candidate', (data) => {
+    const { target, candidate, roomId } = data;
+    socket.to(target).emit('ice-candidate', {
+      candidate,
+      sender: socket.id,
+      roomId
+    });
+  });
+
+  socket.on('ready', (data) => {
+    const { roomId } = data;
+    socket.to(roomId).emit('ready', {
+      sender: socket.id,
+      roomId
+    });
+    console.log(`✅ User ${socket.id} is ready in room ${roomId}`);
+  });
+
+  // Chat Events
+  socket.on('message', (data) => {
+    const { roomId, message, userName } = data;
+    const messageData = {
+      id: Date.now().toString(),
+      message,
+      userName: userName || 'Anonymous',
+      userId: socket.id,
+      timestamp: new Date().toISOString(),
+      type: 'TEXT'
+    };
+    
+    // Broadcast to room
+    io.to(roomId).emit('message', messageData);
+    console.log(`💬 Message in room ${roomId}: ${message}`);
+  });
+
+  socket.on('typing', (data) => {
+    const { roomId, userName } = data;
+    socket.to(roomId).emit('typing', { 
+      userName: userName || 'Anonymous',
+      userId: socket.id 
+    });
+  });
+
+  socket.on('stop-typing', (data) => {
+    const { roomId } = data;
+    socket.to(roomId).emit('stop-typing', { userId: socket.id });
+  });
+
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log(`🔌 User disconnected: ${socket.id}`);
+    
+    // Clean up user from all rooms
+    for (const [roomId, users] of roomUsers.entries()) {
+      if (users.has(socket.id)) {
+        const userData = users.get(socket.id);
+        users.delete(socket.id);
+        
+        // Notify others in the room
+        socket.to(roomId).emit('user-left', { 
+          userId: socket.id, 
+          userName: userData?.userName || 'Anonymous' 
+        });
+        
+        // Clean up empty rooms
+        if (users.size === 0) {
+          roomUsers.delete(roomId);
+        }
+      }
+    }
+    
+    // Remove from connected users
+    connectedUsers.delete(socket.id);
   });
 });
 
@@ -310,13 +481,19 @@ process.on('beforeExit', async () => {
 process.on('SIGINT', async () => {
   console.log('🔄 Received SIGINT, shutting down gracefully...');
   await prisma.$disconnect();
-  process.exit(0);
+  server.close(() => {
+    console.log('🔌 WebSocket server closed');
+    process.exit(0);
+  });
 });
 
 process.on('SIGTERM', async () => {
   console.log('🔄 Received SIGTERM, shutting down gracefully...');
   await prisma.$disconnect();
-  process.exit(0);
+  server.close(() => {
+    console.log('🔌 WebSocket server closed');
+    process.exit(0);
+  });
 });
 
 // Start server
@@ -328,8 +505,8 @@ const startServer = async () => {
     if (!dbConnected) {
       console.log('⚠️  Starting server without database connection...');
     }
-
-    app.listen(PORT, () => {
+    
+    server.listen(PORT, () => {
       console.log(`
 🚀 LinkMeet Backend Server Started!
 📡 Port: ${PORT}
@@ -337,9 +514,10 @@ const startServer = async () => {
 📊 Health Check: http://localhost:${PORT}/health
 📖 API Docs: http://localhost:${PORT}/api
 🗃️  Database: ${dbConnected ? '✅ Connected' : '❌ Disconnected'}
+🔌 WebSocket: ✅ Active
+🎥 WebRTC: ✅ Signaling Ready
       `);
     });
-
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -349,4 +527,4 @@ const startServer = async () => {
 // Start the server
 startServer();
 
-module.exports = app;
+module.exports = { app, server, io, prisma };
