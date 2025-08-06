@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 
 // Import route files
-const authRoutes = require('./auth.routes.js');
-const userRoutes = require('./user.routes.js');
-const roomRoutes = require('./room.routes.js');
-const messageRoutes = require('./message.routes.js');
+const authRoutes = require('./auth.routes');
+const userRoutes = require('./user.routes');
+const roomRoutes = require('./room.routes');
+const messageRoutes = require('./message.routes');
 
 // Setup routes
 router.use('/auth', authRoutes);

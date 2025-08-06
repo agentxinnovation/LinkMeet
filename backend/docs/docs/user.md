@@ -1,91 +1,57 @@
-Here's a comprehensive `TESTING.md` documentation file for your testing team with curl commands for all authentication endpoints:
+
+###Testing Documentation
 
 ```markdown
-# LinkMeet API Testing Documentation
+## User Management Endpoints
 
-## Authentication Endpoints
+### 1. Get All Users (Admin Only)
 
-### 1. Register a New User
-
-**Endpoint**: `POST /api/auth/register`  
-**Description**: Create a new user account  
-**Authentication**: Not required  
+**Endpoint**: `GET /api/users`  
+**Description**: Get list of all users (admin only)  
+**Authentication**: Required (Admin JWT token)  
 
 #### Request:
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "testuser@example.com",
-    "password": "testpassword123",
-    "name": "Test User"
-  }'
-```
-
-#### Successful Response (201 Created):
-```json
-{
-  "success": true,
-  "data": {
-    "id": "clxyz...",
-    "email": "testuser@example.com",
-    "name": "Test User",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijc1MjNkMGY4LTZkNjYtNGRkNS1hZTc4LTQxYTEwYjQwYmQ1ZiIsImlhdCI6MTc1NDQ5ODYxOSwiZXhwIjoxNzU1MTAzNDE5fQ.kRAR4v4P1IWTRhRy3Wqpyl4s1pgRlM1HvS_mrlwmLyY"
-  }
-}
-```
-
-#### Error Cases:
-- **400 Bad Request** - Missing required fields
-- **409 Conflict** - Email already exists
-
----
-
-### 2. User Login
-
-**Endpoint**: `POST /api/auth/login`  
-**Description**: Authenticate and get JWT token  
-**Authentication**: Not required  
-
-#### Request:
-```bash
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "testuser@example.com",
-    "password": "testpassword123"
-  }'
+curl -X GET http://localhost:5000/api/users \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 #### Successful Response (200 OK):
 ```json
 {
   "success": true,
-  "data": {
-    "id": "clxyz...",
-    "email": "testuser@example.com",
-    "name": "Test User",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijc1MjNkMGY4LTZkNjYtNGRkNS1hZTc4LTQxYTEwYjQwYmQ1ZiIsImlhdCI6MTc1NDQ5ODYxOSwiZXhwIjoxNzU1MTAzNDE5fQ.kRAR4v4P1IWTRhRy3Wqpyl4s1pgRlM1HvS_mrlwmLyY"
-  }
+  "count": 5,
+  "data": [
+    {
+      "id": "clxyz...",
+      "email": "admin@example.com",
+      "name": "Admin User",
+      "avatar": null,
+      "isOnline": true,
+      "role": "ADMIN",
+      "createdAt": "2023-08-10T12:34:56.789Z"
+    },
+    ...
+  ]
 }
 ```
 
 #### Error Cases:
-- **400 Bad Request** - Missing credentials
-- **401 Unauthorized** - Invalid credentials
+- **401 Unauthorized** - Missing or invalid token
+- **403 Forbidden** - Non-admin user
 
 ---
 
-### 3. Get Current User Profile
+### 2. Get User by ID
 
-**Endpoint**: `GET /api/auth/me`  
-**Description**: Get authenticated user's profile  
+**Endpoint**: `GET /api/users/:id`  
+**Description**: Get user details by ID  
 **Authentication**: Required (JWT token)  
 
 #### Request:
 ```bash
-curl -X GET http://localhost:5000/api/auth/me \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijc1MjNkMGY4LTZkNjYtNGRkNS1hZTc4LTQxYTEwYjQwYmQ1ZiIsImlhdCI6MTc1NDQ5ODYxOSwiZXhwIjoxNzU1MTAzNDE5fQ.kRAR4v4P1IWTRhRy3Wqpyl4s1pgRlM1HvS_mrlwmLyY"
+curl -X GET http://localhost:5000/api/users/clxyz... \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 #### Successful Response (200 OK):
@@ -94,7 +60,7 @@ curl -X GET http://localhost:5000/api/auth/me \
   "success": true,
   "data": {
     "id": "clxyz...",
-    "email": "testuser@example.com",
+    "email": "test@example.com",
     "name": "Test User",
     "avatar": null,
     "isOnline": true,
@@ -105,24 +71,22 @@ curl -X GET http://localhost:5000/api/auth/me \
 
 #### Error Cases:
 - **401 Unauthorized** - Missing or invalid token
+- **404 Not Found** - User not found
 
 ---
 
-### 4. Update User Profile
+### 3. Update User Online Status
 
-**Endpoint**: `PUT /api/auth/profile`  
-**Description**: Update authenticated user's profile  
+**Endpoint**: `PUT /api/users/:id/status`  
+**Description**: Update user's online status  
 **Authentication**: Required (JWT token)  
 
 #### Request:
 ```bash
-curl -X PUT http://localhost:5000/api/auth/profile \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijc1MjNkMGY4LTZkNjYtNGRkNS1hZTc4LTQxYTEwYjQwYmQ1ZiIsImlhdCI6MTc1NDQ5ODYxOSwiZXhwIjoxNzU1MTAzNDE5fQ.kRAR4v4P1IWTRhRy3Wqpyl4s1pgRlM1HvS_mrlwmLyY" \
+curl -X PUT http://localhost:5000/api/users/clxyz.../status \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "Updated Name",
-    "avatar": "https://example.com/avatar.jpg"
-  }'
+  -d '{"isOnline": false}'
 ```
 
 #### Successful Response (200 OK):
@@ -131,96 +95,17 @@ curl -X PUT http://localhost:5000/api/auth/profile \
   "success": true,
   "data": {
     "id": "clxyz...",
-    "email": "testuser@example.com",
-    "name": "Updated Name",
-    "avatar": "https://example.com/avatar.jpg",
-    "isOnline": true
+    "email": "test@example.com",
+    "name": "Test User",
+    "isOnline": false
   }
 }
 ```
 
 #### Error Cases:
 - **401 Unauthorized** - Missing or invalid token
-- **400 Bad Request** - Invalid data
+- **403 Forbidden** - Updating another user as non-admin
+- **400 Bad Request** - Invalid status value
 
 ---
 
-### 5. User Logout
-
-**Endpoint**: `POST /api/auth/logout`  
-**Description**: Invalidate current session  
-**Authentication**: Required (JWT token)  
-
-#### Request:
-```bash
-curl -X POST http://localhost:5000/api/auth/logout \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Ijc1MjNkMGY4LTZkNjYtNGRkNS1hZTc4LTQxYTEwYjQwYmQ1ZiIsImlhdCI6MTc1NDQ5ODYxOSwiZXhwIjoxNzU1MTAzNDE5fQ.kRAR4v4P1IWTRhRy3Wqpyl4s1pgRlM1HvS_mrlwmLyY"
-```
-
-#### Successful Response (200 OK):
-```json
-{
-  "success": true,
-  "message": "Logged out successfully"
-}
-```
-
-#### Error Cases:
-- **401 Unauthorized** - Missing or invalid token
-
----
-
-## Test Scenarios
-
-### Happy Path Flow
-1. Register a new user
-2. Login with the new credentials
-3. Get profile with the received token
-4. Update profile information
-5. Logout
-
-### Error Testing
-1. Register with missing fields
-2. Register with duplicate email
-3. Login with invalid credentials
-4. Access protected routes without token
-5. Access protected routes with expired/invalid token
-
----
-
-## Environment Setup
-1. Ensure server is running on `http://localhost:5000`
-2. Verify these environment variables are set:
-   - `JWT_SECRET`
-   - `JWT_EXPIRES_IN`
-3. Database should be properly migrated
-
----
-
-## Rate Limiting
-Authentication endpoints are rate limited:
-- 5 requests per minute for `/register` and `/login`
-- 100 requests per minute for other endpoints
-
----
-
-*Last Updated: August 2023*  
-*API Version: 1.0.0*
-```
-
-This documentation provides:
-1. Clear endpoint descriptions
-2. Ready-to-use curl commands
-3. Example responses
-4. Error cases
-5. Test scenarios
-6. Environment requirements
-
-The testing team can:
-- Copy-paste the curl commands directly
-- See exactly what to expect in responses
-- Understand all error cases
-- Follow the suggested test flows
-- Verify their environment setup
-
-You can save this as `TESTING.md` in your project root directory.
